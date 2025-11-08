@@ -21,7 +21,7 @@ if not getgenv().scriptLoaded2 then
     end)
 end
 
--- 7秒後にUI生成（前回フルUIコードのまま）
+-- 7秒後にUI生成
 spawn(function()
     wait(7)
 
@@ -129,16 +129,28 @@ spawn(function()
     local doubleJumpEnabled = false
     local canDoubleJump = false
 
-    local function getChar()
-        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-        local humanoid = char:WaitForChild("Humanoid")
-        local hrp = char:WaitForChild("HumanoidRootPart")
-        return char, humanoid, hrp
+    local Character, Humanoid, HumanoidRootPart
+
+    -- Character 更新関数（リスポーン対応）
+    local function setupCharacter(char)
+        Character = char
+        Humanoid = char:WaitForChild("Humanoid")
+        HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
+        canDoubleJump = false
+
+        Humanoid.StateChanged:Connect(function(_, newState)
+            if newState == Enum.HumanoidStateType.Landed then
+                canDoubleJump = true
+            end
+        end)
     end
 
-    local Character, Humanoid, HumanoidRootPart = getChar()
+    if LocalPlayer.Character then
+        setupCharacter(LocalPlayer.Character)
+    end
+    LocalPlayer.CharacterAdded:Connect(setupCharacter)
 
-    -- TP Walk
+    -- TP Walk ボタン
     hideCheatBtn.MouseButton1Click:Connect(function()
         if currentMode=="hide" then
             tpWalkEnabled = false
@@ -165,17 +177,17 @@ spawn(function()
         hideCheatBtn.Text = "Hide Cheat Walk: "..(currentMode=="hide" and "ON" or "OFF")
     end)
 
-    local lastPosition = HumanoidRootPart.Position
+    local lastPosition = nil
     RunService.RenderStepped:Connect(function()
-        if tpWalkEnabled then
-            local currentPosition = HumanoidRootPart.Position
-            local moveDelta = currentPosition - lastPosition
+        if tpWalkEnabled and HumanoidRootPart then
+            if not lastPosition then lastPosition = HumanoidRootPart.Position end
+            local moveDelta = HumanoidRootPart.Position - lastPosition
             if moveDelta.Magnitude > 0 then
                 HumanoidRootPart.CFrame = CFrame.new(lastPosition + moveDelta*tpWalkSpeed, lastPosition + moveDelta*tpWalkSpeed + HumanoidRootPart.CFrame.LookVector)
             end
             lastPosition = HumanoidRootPart.Position
         else
-            lastPosition = HumanoidRootPart.Position
+            if HumanoidRootPart then lastPosition = HumanoidRootPart.Position end
         end
     end)
 
@@ -227,6 +239,7 @@ spawn(function()
         end
     end)
 
+    -- 既存・新規プレイヤー対応
     for _, player in pairs(Players:GetPlayers()) do
         if player.Character then createHighlightForPlayer(player) end
         player.CharacterAdded:Connect(function()
@@ -248,15 +261,10 @@ spawn(function()
         doubleJumpBtn.Text = "Double Jump: "..(doubleJumpEnabled and "ON" or "OFF")
     end)
 
-    Humanoid.StateChanged:Connect(function(_, newState)
-        if newState == Enum.HumanoidStateType.Landed then
-            canDoubleJump = true
-        end
-    end)
-
     UserInputService.InputBegan:Connect(function(input, gpe)
         if gpe then return end
         if doubleJumpEnabled and input.KeyCode == Enum.KeyCode.Space then
+            if not Humanoid or not HumanoidRootPart then return end
             if Humanoid:GetState() ~= Enum.HumanoidStateType.Freefall and Humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
                 return
             end
@@ -267,4 +275,5 @@ spawn(function()
             end
         end
     end)
+
 end)
